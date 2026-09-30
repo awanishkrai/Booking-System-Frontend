@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../api/axios';
+import { login } from '../../api/axios';
 import './login.css'
 import roomImage from '../../assets/ChatGPT Image Sep 9, 2026, 11_07_47 PM.png'
 import Error from '../error';
@@ -13,7 +14,7 @@ export default function LoginForm() {
         event.preventDefault();
         setError("");
         try {
-            const response = await api.post('/login', { username, password });
+            const response = await login(username, password);
             const { token } = response.data;
             localStorage.setItem("token", token);
         }
