@@ -46,20 +46,21 @@ function MyBookings() {
         setTimeout(() => setToast(null), 4000)
     }
 
-    const handleCancel = async (bookingId) => {
+    const handleCancel = async (booking) => {
         if (!window.confirm('Are you sure you want to cancel this booking?')) return
-        setCancellingId(bookingId)
+        setCancellingId(booking.id)
         try {
-            await cancelBooking(bookingId)
+            await cancelBooking(booking.id, booking.idempotency_key)
             setBookings((prev) =>
                 prev.map((b) =>
-                    b.id === bookingId ? { ...b, status: 'CANCELLED' } : b
+                    b.id === booking.id ? { ...b, status: 'CANCELLED' } : b
                 )
             )
             showToast('success', 'Booking cancelled successfully.')
         } catch (err) {
-            const msg = err?.response?.data?.detail || 'Could not cancel booking.'
-            showToast('error', msg)
+            const data = err?.response?.data
+            const msg = data?.message || data?.detail || 'Could not cancel booking.'
+            showToast('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
         } finally {
             setCancellingId(null)
         }
@@ -163,7 +164,7 @@ function MyBookings() {
                                         </div>
                                         <div className="mb-card-details">
                                             <h3 className="mb-card-room">
-                                                {booking.room_name || booking.room || `Room #${booking.room}`}
+                                                {booking.room?.name || booking.room_name || (typeof booking.room === 'string' ? booking.room : `Room #${booking.room?.id || booking.id}`)}
                                             </h3>
                                             <div className="mb-card-meta">
                                                 <span className="mb-meta-item">
@@ -179,7 +180,7 @@ function MyBookings() {
                                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                         <circle cx="12" cy="12" r="10" />
                                                         <polyline points="12 6 12 12 16 14" />
-                                                    </svg>
+                                                     </svg>
                                                     {formatTime(booking.start_time)} – {formatTime(booking.end_time)}
                                                 </span>
                                                 {booking.idempotency_key && (
@@ -198,7 +199,7 @@ function MyBookings() {
                                         {canCancel && (
                                             <button
                                                 className="mb-cancel-btn"
-                                                onClick={() => handleCancel(booking.id)}
+                                                onClick={() => handleCancel(booking)}
                                                 disabled={isCancelling}
                                             >
                                                 {isCancelling ? (

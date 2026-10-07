@@ -28,7 +28,7 @@ function BookingPage() {
 
         getRoom(id)
             .then((res) => {
-                setRoom(res.data)
+                setRoom(res.data.data || res.data)
                 setLoading(false)
             })
             .catch(() => {
@@ -61,10 +61,13 @@ function BookingPage() {
             showToast('success', 'Room booked successfully! 🎉')
             setTimeout(() => navigate('/bookings/'), 1800)
         } catch (err) {
-            const msg = err?.response?.data?.detail
-                || err?.response?.data?.non_field_errors?.[0]
+            const data = err?.response?.data
+            const msg = data?.message
+                || data?.detail
+                || data?.non_field_errors?.[0]
+                || (data?.room_id ? data.room_id[0] : null)
                 || 'Booking failed. Please try again.'
-            showToast('error', msg)
+            showToast('error', typeof msg === 'string' ? msg : JSON.stringify(msg))
         } finally {
             setSubmitting(false)
         }

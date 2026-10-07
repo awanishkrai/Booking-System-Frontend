@@ -1,15 +1,16 @@
 import { useState } from 'react';
-import api from '../../api/axios';
 import { login } from '../../api/axios';
 import './login.css'
 import roomImage from '../../assets/ChatGPT Image Sep 9, 2026, 11_07_47 PM.png'
 import Error from '../error';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+
 
 export default function LoginForm() {
     const [username, setUsername] = useState("");
     const [password, setPassword] = useState("");
     const [error, setError] = useState("");
+    const navigate = useNavigate()
     const handleLogin = async (event) => {
         event.preventDefault();
         setError("");
@@ -17,9 +18,17 @@ export default function LoginForm() {
             const response = await login(username, password);
             const { token } = response.data;
             localStorage.setItem("token", token);
+            localStorage.setItem("username", username);
+            navigate('/rooms/')
         }
         catch (err) {
-            setError(err.message);
+            const data = err.response?.data;
+            const msg = data?.non_field_errors?.[0]
+                || data?.detail
+                || data?.message
+                || err.message
+                || "Invalid username or password.";
+            setError(typeof msg === 'string' ? msg : JSON.stringify(msg));
         }
     }
     return (

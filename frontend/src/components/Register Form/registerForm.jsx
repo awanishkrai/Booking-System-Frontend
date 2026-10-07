@@ -3,27 +3,35 @@ import { register } from '../../api/axios';
 import './registerForm.css';
 import roomImage from '../../assets/ChatGPT Image Sep 9, 2026, 11_07_47 PM.png';
 import Error from '../error';
-import { Link } from 'react-router-dom';
-
+import { Link, useNavigate } from 'react-router-dom';
 export default function RegisterForm() {
   const [username, setUsername] = React.useState('');
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [confirmPassword, setConfirmPassword] = React.useState('');
+  const navigate = useNavigate();
   const [error, setError] = React.useState('');
 
   const handleRegister = async (event) => {
+    event.preventDefault();
     if (password !== confirmPassword) {
       setError('Passwords do not match');
       return;
     }
-    event.preventDefault();
     setError('');
     try {
       const response = await register(username, email, password);
       console.log(response.data);
+      navigate("/");
     } catch (err) {
-      setError(err.message);
+      const data = err.response?.data;
+      let msg = data?.message || data?.detail || err.message || 'Registration failed';
+      if (typeof msg === 'object') {
+        msg = Object.entries(msg)
+          .map(([key, val]) => `${key}: ${Array.isArray(val) ? val.join(', ') : val}`)
+          .join(' | ');
+      }
+      setError(msg);
     }
   }
 
