@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getAllRooms } from '../../api/axios'
 import Navbar from '../Navbar/navbar'
@@ -10,28 +10,79 @@ function AllRooms() {
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedRoom, setSelectedRoom] = useState(null)
     const [loading, setLoading] = useState(true)
+
+    // ── Filter state ──────────────────────────────────────────────────────────
+    // 'available' = only rooms with slots>0 | 'all' = show everything
+    const [availFilter, setAvailFilter] = useState('available')
+    // minimum free slots: 0 = Any, 1, 3, 5
+    const [minSlots, setMinSlots] = useState(0)
+    // sort: 'recommended' | 'cap-asc' | 'cap-desc' | 'most-available'
+    const [sortBy, setSortBy] = useState('recommended')
+
     const navigate = useNavigate()
 
     useEffect(() => {
-        const token = localStorage.getItem("token");
-        if (!token) {
-            navigate('/')
-            return
-        }
-        getAllRooms().then((res) => {
-            setRooms(res.data.data || res.data)
-            setLoading(false)
-        }).catch((err) => {
-            console.log(err)
-            setLoading(false)
-        })
+        const token = localStorage.getItem('token')
+        if (!token) { navigate('/'); return }
+        getAllRooms()
+            .then((res) => {
+                setRooms(res.data.data || res.data)
+                setLoading(false)
+            })
+            .catch((err) => {
+                console.error(err)
+                setLoading(false)
+            })
     }, [])
 
     const isAvailable = (room) => room.available_slots > 0
 
-    const filteredRooms = rooms.filter(room =>
-        room.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    // ── Derived: filter + sort ────────────────────────────────────────────────
+    const filteredRooms = useMemo(() => {
+        let result = rooms
+
+        // 1. Text search
+        if (searchQuery.trim()) {
+            const q = searchQuery.toLowerCase()
+            result = result.filter((r) => r.name.toLowerCase().includes(q))
+        }
+
+        // 2. Availability filter
+        if (availFilter === 'available') {
+            result = result.filter((r) => r.available_slots > 0)
+        }
+
+        // 3. Min free slots filter
+        if (minSlots > 0) {
+            result = result.filter((r) => r.available_slots >= minSlots)
+        }
+
+        // 4. Sort
+        result = [...result]
+        if (sortBy === 'cap-asc') {
+            result.sort((a, b) => a.capacity - b.capacity)
+        } else if (sortBy === 'cap-desc') {
+            result.sort((a, b) => b.capacity - a.capacity)
+        } else if (sortBy === 'most-available') {
+            result.sort((a, b) => b.available_slots - a.available_slots)
+        }
+        // 'recommended' = default API order
+
+        return result
+    }, [rooms, searchQuery, availFilter, minSlots, sortBy])
+
+    const clearFilters = () => {
+        setSearchQuery('')
+        setAvailFilter('available')
+        setMinSlots(0)
+        setSortBy('recommended')
+    }
+
+    const activeFilterCount = [
+        availFilter !== 'available' ? 1 : 0,
+        minSlots > 0 ? 1 : 0,
+        searchQuery.trim() ? 1 : 0,
+    ].reduce((a, b) => a + b, 0)
 
     return (
         <div id="all-rooms-page">
@@ -56,6 +107,7 @@ function AllRooms() {
 
                 {/* Sidebar */}
                 <aside id="rooms-sidebar">
+                    {/* Search */}
                     <div id="rooms-search-box">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
                             <circle cx="11" cy="11" r="8" />
@@ -68,30 +120,74 @@ function AllRooms() {
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />
+                        {searchQuery && (
+                            <button id="search-clear" onClick={() => setSearchQuery('')} title="Clear">✕</button>
+                        )}
                     </div>
 
+                    {/* Filter heading + clear */}
                     <div className="sidebar-section">
-                        <h3 className="sidebar-heading">Filters</h3>
+                        <div className="sidebar-heading-row">
+                            <h3 className="sidebar-heading">Filters</h3>
+                            {activeFilterCount > 0 && (
+                                <button className="sidebar-clear-btn" onClick={clearFilters}>
+                                    Clear {activeFilterCount > 1 ? `(${activeFilterCount})` : ''}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
+                    {/* Availability filter — radio behaviour */}
                     <div className="sidebar-section">
                         <h4 className="sidebar-label">Availability</h4>
-                        <label className="sidebar-checkbox">
-                            <input type="checkbox" defaultChecked />
+                        <label className={`sidebar-radio ${availFilter === 'available' ? 'sidebar-radio-active' : ''}`}>
+                            <input
+                                type="radio"
+                                name="avail"
+                                value="available"
+                                checked={availFilter === 'available'}
+                                onChange={() => setAvailFilter('available')}
+                            />
+                            <span className="radio-dot"></span>
                             Available Now
                         </label>
-                        <label className="sidebar-checkbox">
-                            <input type="checkbox" />
+                        <label className={`sidebar-radio ${availFilter === 'all' ? 'sidebar-radio-active' : ''}`}>
+                            <input
+                                type="radio"
+                                name="avail"
+                                value="all"
+                                checked={availFilter === 'all'}
+                                onChange={() => setAvailFilter('all')}
+                            />
+                            <span className="radio-dot"></span>
                             Show All
                         </label>
                     </div>
 
+                    {/* Min free slots filter — radio behaviour */}
                     <div className="sidebar-section">
                         <h4 className="sidebar-label">Min. Free Slots</h4>
-                        <label className="sidebar-checkbox"><input type="checkbox" defaultChecked /> Any</label>
-                        <label className="sidebar-checkbox"><input type="checkbox" /> 1+</label>
-                        <label className="sidebar-checkbox"><input type="checkbox" /> 3+</label>
-                        <label className="sidebar-checkbox"><input type="checkbox" /> 5+</label>
+                        {[
+                            { label: 'Any', value: 0 },
+                            { label: '1+', value: 1 },
+                            { label: '3+', value: 3 },
+                            { label: '5+', value: 5 },
+                        ].map(({ label, value }) => (
+                            <label
+                                key={value}
+                                className={`sidebar-radio ${minSlots === value ? 'sidebar-radio-active' : ''}`}
+                            >
+                                <input
+                                    type="radio"
+                                    name="minSlots"
+                                    value={value}
+                                    checked={minSlots === value}
+                                    onChange={() => setMinSlots(value)}
+                                />
+                                <span className="radio-dot"></span>
+                                {label}
+                            </label>
+                        ))}
                     </div>
                 </aside>
 
@@ -99,15 +195,21 @@ function AllRooms() {
                 <main id="rooms-grid-area">
                     <div id="rooms-grid-header">
                         <span id="rooms-count">
-                            {loading ? 'Loading...' : `${filteredRooms.length} room${filteredRooms.length !== 1 ? 's' : ''} found`}
+                            {loading
+                                ? 'Loading...'
+                                : `${filteredRooms.length} room${filteredRooms.length !== 1 ? 's' : ''} found`}
                         </span>
                         <div id="rooms-sort">
-                            <label>Sort by:</label>
-                            <select>
-                                <option>Recommended</option>
-                                <option>Capacity: Low to High</option>
-                                <option>Capacity: High to Low</option>
-                                <option>Most Available</option>
+                            <label htmlFor="rooms-sort-select">Sort by:</label>
+                            <select
+                                id="rooms-sort-select"
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                            >
+                                <option value="recommended">Recommended</option>
+                                <option value="cap-asc">Capacity: Low to High</option>
+                                <option value="cap-desc">Capacity: High to Low</option>
+                                <option value="most-available">Most Available</option>
                             </select>
                         </div>
                     </div>
@@ -123,7 +225,8 @@ function AllRooms() {
                                 <rect x="2" y="3" width="20" height="18" rx="2" />
                                 <path d="M8 3v18M16 3v18M2 9h20M2 15h20" />
                             </svg>
-                            <p>No rooms match your search.</p>
+                            <p>No rooms match your filters.</p>
+                            <button id="rooms-clear-filters-btn" onClick={clearFilters}>Clear Filters</button>
                         </div>
                     ) : (
                         <div id="rooms-grid">
